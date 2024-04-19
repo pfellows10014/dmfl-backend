@@ -1,7 +1,6 @@
 package com.dmfl.backendserver.service
 
 import com.dmfl.backendserver.model.Team
-import com.dmfl.backendserver.repository.PlayerRepository
 import com.dmfl.backendserver.repository.TeamRepository
 import org.apache.commons.collections4.IteratorUtils
 import org.springframework.stereotype.Service
@@ -32,7 +31,7 @@ class TeamService(val db: TeamRepository, private val playerService: PlayerServi
                 throw Exception(e)
             }
         }
-        db.save(team)
+        db.saveAndFlush(team)
     }
 
 //    fun save(team: Team){

@@ -32,11 +32,14 @@ class WebSecurityConfig {
     @Bean
     fun filterChainBasic(http: HttpSecurity): SecurityFilterChain {
         http {
+            csrf {
+                disable()
+            }
             cors {
                 corsConfigurationSource()
             }
             authorizeRequests {
-                authorize("/api/**", permitAll)
+                authorize("/api/*", permitAll)
 //                authorize("POST", hasAnyAuthority("DMFL_ADMIN"))
             }
             httpBasic {}
