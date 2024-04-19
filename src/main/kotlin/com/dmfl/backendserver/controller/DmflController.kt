@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.*
 import java.util.Comparator.comparing
 import java.util.NoSuchElementException
 
-@CrossOrigin(origins = ["http://localhost:4200"])
 @RestController
 @RequestMapping("/api")
 class DmflController(private val teamService: TeamService, private val playerService: PlayerService,

@@ -4,6 +4,7 @@ import com.dmfl.backendserver.model.Standing
 import com.dmfl.backendserver.repository.StandingRepository
 import org.apache.commons.collections4.IteratorUtils
 import org.springframework.stereotype.Service
+import kotlin.reflect.full.createInstance
 
 @Service
 class StandingService(val db:StandingRepository) {
