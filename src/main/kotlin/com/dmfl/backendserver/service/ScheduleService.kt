@@ -16,6 +16,11 @@ class ScheduleService(val db:ScheduleRepository) {
 
     fun findScheduleByWeek(week: String): Schedule = db.findById(week).get()
 
+    fun resetByWeek(week: String) {
+        val currentSchedule = findScheduleByWeek(week)
+        db.delete(currentSchedule)
+    }
+
     private fun <T> Iterable<T>.toList(): List<T> =
         IteratorUtils.toList(this.iterator())
 }

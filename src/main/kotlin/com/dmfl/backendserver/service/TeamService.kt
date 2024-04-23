@@ -2,6 +2,7 @@ package com.dmfl.backendserver.service
 
 import com.dmfl.backendserver.model.Team
 import com.dmfl.backendserver.repository.TeamRepository
+import mu.KotlinLogging
 import org.apache.commons.collections4.IteratorUtils
 import org.springframework.stereotype.Service
 import kotlin.jvm.optionals.getOrNull
@@ -13,26 +14,18 @@ class TeamService(val db: TeamRepository, private val playerService: PlayerServi
 //        Gson().fromJson(response.getString("roster"), Roster::class.java))
 //    }
 
+    private val log = KotlinLogging.logger {}
+
     fun findAllTeams(): List<Team> = db.findAll().toList()
 
     fun findTeamByName(name: String): Team? = db.findById(name).getOrNull()
 
     fun save(team: Team){
-        for(player in team.players) {
-            try {
-                val name = player.name.orEmpty()
-                if(name.isNotEmpty()) {
-                    val currentPlayer = playerService.findPlayerByName(name)
-                    if(currentPlayer == null) {
-                        playerService.save(player)
-                    }
-                }
-            } catch (e: Exception) {
-                throw Exception(e)
-            }
-        }
+        log.debug("Saving and flushing: {}", team.name)
         db.saveAndFlush(team)
     }
+
+    fun delete(teamName: String): Unit = db.deleteById(teamName)
 
 //    fun save(team: Team){
 //        val roster = Gson().toJson(team.roster)
