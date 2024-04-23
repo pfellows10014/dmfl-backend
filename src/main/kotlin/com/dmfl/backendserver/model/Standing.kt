@@ -7,11 +7,11 @@ import jakarta.persistence.Table
 @Entity
 @Table(name = "STANDINGS")
 data class Standing(
-    @Id var teamName: String?,
-    var wins: Double,
-    var losses: Double,
-    var winPercentage: Double,
-    var pointsFor: Int,
-    var pointsAgainst: Int,
-    var pointDifferential: Int,
-    var streak: Int)
+        @Id var teamName: String?,
+        var wins: Double,
+        var losses: Double,
+        var winPercentage: Double,
+        var pointsFor: Int,
+        var pointsAgainst: Int,
+        var pointDifferential: Int,
+        var streak: String)

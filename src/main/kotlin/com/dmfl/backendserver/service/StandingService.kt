@@ -9,10 +9,16 @@ import org.springframework.stereotype.Service
 class StandingService(val db:StandingRepository) {
 
     fun updateStandings(standing: Standing) {
-        db.save(standing)
+        db.saveAndFlush(standing)
     }
 
-    fun findStandingByTeam(teamName: String): Standing = db.findById(teamName).get()
+    fun reset() {
+        db.deleteAllInBatch()
+    }
+
+    fun findStandingByTeam(teamName: String): Standing = db.findById(teamName).orElse(Standing(
+        teamName, 0.0, 0.0, 0.0, 0, 0, 0, "0"
+    ))
 
     fun findAllStandings(): List<Standing> = db.findAll().toList()
 
