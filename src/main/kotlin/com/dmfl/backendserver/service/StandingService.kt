@@ -6,7 +6,7 @@ import org.apache.commons.collections4.IteratorUtils
 import org.springframework.stereotype.Service
 
 @Service
-class StandingService(val db:StandingRepository) {
+class StandingService(val db: StandingRepository) {
 
     fun updateStandings(standing: Standing) {
         db.saveAndFlush(standing)
@@ -17,8 +17,7 @@ class StandingService(val db:StandingRepository) {
     }
 
     fun findStandingByTeam(teamName: String): Standing = db.findById(teamName).orElse(Standing(
-        teamName, 0.0, 0.0, 0.0, 0, 0, 0, "0"
-    ))
+        teamName))
 
     fun findAllStandings(): List<Standing> = db.findAll().toList()
 

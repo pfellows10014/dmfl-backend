@@ -3,16 +3,17 @@ package com.dmfl.backendserver.controller
 import com.dmfl.backendserver.constants.AppConstants.Companion.MAX_POINT_DIFFERENTIAL
 import com.dmfl.backendserver.model.Game
 import com.dmfl.backendserver.model.Player
+import com.dmfl.backendserver.model.Roster
 import com.dmfl.backendserver.model.Schedule
 import com.dmfl.backendserver.model.Standing
 import com.dmfl.backendserver.model.Team
 import com.dmfl.backendserver.service.GameService
 import com.dmfl.backendserver.service.PlayerService
+import com.dmfl.backendserver.service.RosterService
 import com.dmfl.backendserver.service.ScheduleService
 import com.dmfl.backendserver.service.StandingService
 import com.dmfl.backendserver.service.TeamService
 import mu.KotlinLogging
-import org.apache.commons.lang3.StringUtils
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
@@ -22,42 +23,58 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.time.Year
 import java.util.Comparator.comparing
-import java.util.NoSuchElementException
 import kotlin.math.abs
-import kotlin.text.StringBuilder
 
 @RestController
 @RequestMapping("/api")
 class DmflController(private val teamService: TeamService, private val playerService: PlayerService,
                      private val scheduleService: ScheduleService, private val gameService: GameService,
-                     private val standingService: StandingService
+                     private val standingService: StandingService, private val rosterService: RosterService
 ) {
 
     private val log = KotlinLogging.logger {}
 
-    @GetMapping("/teams")
+    @GetMapping("/teams/all")
     fun getTeams(): List<Team> {
 
-        return teamService
-            .findAllTeams()
+        return teamService.findAllTeams()
+    }
+
+    @GetMapping("teams/current")
+    fun getCurrentTeam(): List<Team> {
+        val isActive = true
+
+        return teamService.findTeamsByIsActive(isActive)
     }
 
     @PostMapping("/teams/save")
-    fun addTeam(@RequestBody team: Team) {
+    fun addTeam(@RequestBody team: Team, @RequestParam season: String, @RequestParam year: Year) {
         log.debug("Adding team: {}", team.name)
-        for(player in team.players){
-            if(player.firstName != null && player.lastName != null){
-                try {
-                    playerService.findPlayerByFirstAndLastName(player.firstName, player.lastName)
-                } catch (e: NoSuchElementException) {
-                    log.warn("Player does not exist, creating new player")
-                    playerService.save(player)
-                } catch (e: Exception) {
-                    log.error("Error occurred while saving team: {}", e.stackTrace)
-                    throw Exception(e)
+
+//        val teamRoster = team.rosterList.stream().filter { it.year == Year.of(2024) && it.season == "spr"}.findFirst().get()
+        val keyPair = Pair(season, year)
+
+
+        val teamRoster = team.rosterMap[keyPair]
+//        val teamRoster = team.rosterMap["spr-2024"]
+
+        if (teamRoster != null) {
+            for(player in teamRoster.players){
+                if(player.firstName != null && player.lastName != null){
+                    try {
+                        playerService.findPlayerByFirstAndLastName(player.firstName, player.lastName)
+                    } catch (e: NoSuchElementException) {
+                        log.warn("Player does not exist, creating new player")
+                        playerService.save(player)
+                    } catch (e: Exception) {
+                        log.error("Error occurred while saving team: {}", e.stackTrace)
+                        throw Exception(e)
+                    }
                 }
             }
+            rosterService.save(teamRoster)
         }
         log.debug("Calling team service to save team: {}", team.name)
         teamService.save(team)
@@ -71,20 +88,27 @@ class DmflController(private val teamService: TeamService, private val playerSer
     }
 
     @PostMapping("/teams/{teamName}/players/add")
-    fun addPlayerToTeam(@PathVariable teamName: String, @RequestParam playerFirstName: String, @RequestParam playerLastName: String): ResponseEntity<String> {
+    fun addPlayerToTeam(@PathVariable teamName: String, @RequestParam firstName: String, @RequestParam lastName: String,
+                        @RequestParam season: String, @RequestParam year: Year): ResponseEntity<String> {
+        val keyPair = Pair(season, year)
 
         try {
             val team = teamService.findTeamByName(teamName)
-            val player = playerService.findPlayerByFirstAndLastName(playerFirstName, playerLastName)
-            if(team != null && player != null) {
-                log.info("Adding player {}, {} to Team {}", playerFirstName, playerLastName, team.name)
-                val arrayList = ArrayList(team.players)
+            val player = playerService.findPlayerByFirstAndLastName(firstName, lastName)
+            if(player != null) {
+                log.info("Adding player {}, {} to Team {}", firstName, lastName, team.name)
+//                val teamRoster = team.rosterList.stream().filter { it.year == Year.of(2024) && it.season == "spr"}.findFirst().get()
+                val teamRoster = team.rosterMap[keyPair]
+//                val teamRoster = team.rosterMap["spr-2024"]
+                val arrayList = ArrayList(teamRoster!!.players)
+//                val arrayList = ArrayList(team.roster.players)
                 arrayList.add(player)
-                team.players = arrayList;
+                teamRoster.players = arrayList;
+//                team.roster.players = arrayList
                 teamService.save(team)
                 return ResponseEntity(HttpStatus.OK)
             }
-            log.warn("Player {}, {} can not be added to non-existent team {}", playerFirstName, playerLastName, teamName)
+            log.warn("Player {}, {} can not be added to non-existent team {}", firstName, lastName, teamName)
             return ResponseEntity("Team doesn't exist.", HttpStatus.BAD_REQUEST)
         } catch (e: Exception) {
             log.error("Error occurred while adding player to team: {}", e.stackTrace)
@@ -93,22 +117,31 @@ class DmflController(private val teamService: TeamService, private val playerSer
     }
 
     @PostMapping("/teams/{teamName}/players/remove")
-    fun removePlayerFromTeam(@PathVariable teamName: String, @RequestParam playerFirstName: String, @RequestParam playerLastName: String): ResponseEntity<String> {
+    fun removePlayerFromTeam(@PathVariable teamName: String, @RequestParam firstName: String, @RequestParam lastName: String,
+                             @RequestParam season: String, @RequestParam year: Year): ResponseEntity<String> {
+        val keyPair = Pair(season, year)
 
         try {
             val team = teamService.findTeamByName(teamName)
-            if(team?.players != null) {
-                val playersList = ArrayList(team.players)
+//            val teamRoster = team?.rosterList?.stream()?.filter { it.year == Year.of(2024) && it.season == "spr"}?.findFirst()?.get()
+            val teamRoster = team.rosterMap[keyPair]
+//            val teamRoster = team!!.rosterMap["spr-2024"]
+
+            if(teamRoster != null && teamRoster.players.isNotEmpty()) {
+                val playersList = ArrayList(teamRoster.players)
                 val playerIterator = playersList.iterator()
                 while (playerIterator.hasNext()) {
                     val currentPlayer = playerIterator.next()
-                    val requestedPlayer = playerService.findPlayerByFirstAndLastName(playerFirstName, playerLastName)!!
-                    if (currentPlayer.pId == requestedPlayer.pId)
-                        log.info("Player {}, {} has being removed from {}", playerFirstName, playerLastName, team.name)
+                    val requestedPlayer = playerService.findPlayerByFirstAndLastName(firstName, lastName)!!
+                    if (currentPlayer.playerId == requestedPlayer.playerId)
+                        log.info("Player {}, {} has being removed from {}", firstName, lastName, team.name)
                         playerIterator.remove()
                 }
-                team.players = playersList;
-                teamService.save(team)
+//                team.roster.players = playersList
+//                teamService.save(team)
+                teamRoster.players = playersList
+                rosterService.save(teamRoster)
+               //teamService.save(team)
                 return ResponseEntity(HttpStatus.OK)
             }
             log.warn("Team {} does not exist or has no players to be removed", teamName)
@@ -119,11 +152,20 @@ class DmflController(private val teamService: TeamService, private val playerSer
         }
     }
 
-    @GetMapping("/teams/{name}")
-    fun findTeam(@PathVariable name: String): Team? {
-        log.info("Team name: {}", name)
+//    @GetMapping("/teams/{name}")
+//    fun findTeam(@PathVariable name: String): Team? {
+//        log.info("Team name: {}", name)
+//
+//
+//        return teamService.findTeamByName(name)
+//    }
 
-        return teamService.findTeamByName(name)
+    @GetMapping("/teams/{teamId}")
+    fun findTeamById(@PathVariable teamId: String): Team? {
+        log.info("Team teamId: {}", teamId)
+
+
+        return teamService.findTeamById(teamId)
     }
 
     @GetMapping("/player/{name}")
@@ -153,7 +195,7 @@ class DmflController(private val teamService: TeamService, private val playerSer
     fun addSchedule(@RequestBody schedule: Schedule){
         for(game in schedule.games){
             try {
-                gameService.findGameByName(game.name)
+                gameService.findGameByName(game.gameId)
             } catch (e: NoSuchElementException) {
                 log.warn("Game does not exist, creating new game")
                 gameService.save(game)
@@ -193,7 +235,7 @@ class DmflController(private val teamService: TeamService, private val playerSer
 //            val currentGame = gameService.findGameByName(game.name)
 
             schedule.games.forEach {
-                if(it.name == game.name) {
+                if(it.gameId == game.gameId) {
                     gameExist = true
                 }
             }
@@ -203,11 +245,10 @@ class DmflController(private val teamService: TeamService, private val playerSer
             }
 
             if(game.time == "Final" && gameExist && !game.isPlayoff) {
-                val teams = StringUtils.splitByWholeSeparator(game.name, " vs ")
+                log.info("{} vs {}", game.homeTeam, game.awayTeam)
 
-                log.info("{} vs {}", teams[0], teams[1])
-                val homeTeamStanding = standingService.findStandingByTeam(teams[0])
-                val awayTeamStanding = standingService.findStandingByTeam(teams[1])
+                val homeTeamStanding = standingService.findStandingByTeam(game.homeTeam.name)
+                val awayTeamStanding = standingService.findStandingByTeam(game.awayTeam.name)
                 var homeWins = homeTeamStanding.wins
                 var homeLosses = homeTeamStanding.losses
                 var homeStreak = homeTeamStanding.streak
@@ -377,15 +418,14 @@ class DmflController(private val teamService: TeamService, private val playerSer
         log.info("{} - {}", teamOneOpponentList.size, teamTwoOpponentList.size)
 
         teamOneOpponentList.forEach { game ->
-            val teams = StringUtils.splitByWholeSeparator(game.name, " vs ")
-            var teamOneWon: Boolean
-            log.debug(game.name)
-            val opponentRecord: Standing = if (teams[0] == teamName) {
+            val teamOneWon: Boolean
+            log.debug(game.gameId)
+            val opponentRecord: Standing = if (game.homeTeam.name == teamName) {
                 teamOneWon = game.homeScore > game.awayScore
-                standingService.findStandingByTeam(teams[1])
+                standingService.findStandingByTeam(game.awayTeam.name)
             } else {
                 teamOneWon = game.awayScore > game.homeScore
-                standingService.findStandingByTeam(teams[0])
+                standingService.findStandingByTeam(game.homeTeam.name)
             }
              if (teamOneWon)
                 teamOneOpponentWinPert += opponentRecord.winPercentage
@@ -393,15 +433,14 @@ class DmflController(private val teamService: TeamService, private val playerSer
         }
 
         teamTwoOpponentList.forEach { game ->
-            val teams = StringUtils.splitByWholeSeparator(game.name, " vs ")
-            var teamTwoWon: Boolean
-            log.debug(game.name)
-            val opponentRecord: Standing = if( teams[0] == teamName2) {
+            val teamTwoWon: Boolean
+            log.debug(game.gameId)
+            val opponentRecord: Standing = if( game.homeTeam.name == teamName2) {
                 teamTwoWon = game.homeScore > game.awayScore
-                standingService.findStandingByTeam(teams[1])
+                standingService.findStandingByTeam(game.awayTeam.name)
             } else {
                 teamTwoWon = game.awayScore > game.homeScore
-                standingService.findStandingByTeam(teams[0])
+                standingService.findStandingByTeam(game.homeTeam.name)
             }
             if (teamTwoWon)
                 teamTwoOpponentWinPert += opponentRecord.winPercentage
@@ -447,5 +486,44 @@ class DmflController(private val teamService: TeamService, private val playerSer
         }
 
         return 0
+    }
+
+    @PostMapping("season/start")
+    fun startSeason(@RequestBody teamNames: List<String>, @RequestParam year: Year, @RequestParam season: String) {
+        for (team in teamNames) {
+            try {
+                val currentTeam = teamService.findTeamByName(team)
+                if(currentTeam.isActive) {
+                    log.warn("Team {} is already active for {}-{} season", team, season, year)
+                } else {
+                    log.debug("Activating team {} for the {}-{} season", team, season, year)
+                    currentTeam.isActive = true
+                    val newRoster = Roster()
+//                team.rosterList += newRoster
+                    currentTeam.rosterMap += mapOf(Pair(season, year) to newRoster)
+//                team.rosterMap += mapOf("spr-2024" to newRoster)
+                    rosterService.save(newRoster)
+                    teamService.save(currentTeam)
+                }
+            } catch (e: Exception) {
+                log.error("Error occurred activating teams: team: {}; error {}", team, e.stackTrace)
+                throw Exception(e)
+            }
+        }
+    }
+
+    @PostMapping("season/end")
+    fun endSeason() {
+        val allActiveTeam = teamService.findTeamsByIsActive(true)
+
+        for (team in allActiveTeam) {
+            try {
+                team.isActive = false
+                teamService.save(team)
+            } catch (e: Exception) {
+                log.error("Error occurred deactivating teams: team: {}; error {}", team.name, e.stackTrace)
+                throw Exception(e)
+            }
+        }
     }
 }

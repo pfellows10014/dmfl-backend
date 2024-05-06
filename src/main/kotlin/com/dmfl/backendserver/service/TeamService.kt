@@ -18,11 +18,20 @@ class TeamService(val db: TeamRepository, private val playerService: PlayerServi
 
     fun findAllTeams(): List<Team> = db.findAll().toList()
 
-    fun findTeamByName(name: String): Team? = db.findById(name).getOrNull()
+    fun findTeamsByIsActive(isActive: Boolean): List<Team> = db.findByIsActive(isActive)
+
+    fun findTeamByName(name: String): Team = db.findByName(name).get()
+
+    fun findTeamById(teamId: String): Team? = db.findById(teamId).getOrNull()
 
     fun save(team: Team){
         log.debug("Saving and flushing: {}", team.name)
-        db.saveAndFlush(team)
+        try {
+            db.saveAndFlush(team)
+        } catch (e: Exception) {
+            log.error("Error occurred while saving team: {}", e.stackTrace)
+            throw Exception(e)
+        }
     }
 
     fun delete(teamName: String): Unit = db.deleteById(teamName)
