@@ -16,9 +16,7 @@ class StandingService(val db:StandingRepository) {
         db.deleteAllInBatch()
     }
 
-    fun findStandingByTeam(teamName: String): Standing = db.findById(teamName).orElse(Standing(
-        teamName, 0.0, 0.0, 0.0, 0, 0, 0, "0"
-    ))
+    fun findStandingByTeam(teamName: String): Standing = db.findById(teamName).orElse(Standing(teamName))
 
     fun findAllStandings(): List<Standing> = db.findAll().toList()
 
