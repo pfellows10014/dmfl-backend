@@ -1,11 +1,16 @@
 package com.dmfl.backendserver.model
 
-import jakarta.persistence.*
+import jakarta.persistence.Entity
+import jakarta.persistence.Id
+import jakarta.persistence.Table
 
 @Entity
 @Table(name = "PLAYERS")
 data class Player(
-    @Id var name: String?,
-    val number: Long?,
-    val positions: List<String>,
-    val captain: Boolean)
+        @Id var pId: String?,
+        val firstName: String?,
+        val lastName: String?) {
+    val number: Int = 0
+    val positions: List<String> = mutableListOf()
+    val captain: Boolean = false
+}

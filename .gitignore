@@ -16,6 +16,9 @@ target/
 ### MVN ###
 .mvn
 
+### Logs ###
+logs
+
 ### IntelliJ IDEA ###
 .idea
 .fleet

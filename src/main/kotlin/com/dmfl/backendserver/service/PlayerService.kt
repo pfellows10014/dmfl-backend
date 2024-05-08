@@ -9,8 +9,11 @@ import kotlin.jvm.optionals.getOrNull
 class PlayerService(val db:PlayerRepository) {
 
     fun save(player: Player){
-        db.save(player)
+        db.saveAndFlush(player)
     }
+
+    fun findPlayerByFirstAndLastName(firstName: String, lastName: String):
+            Player? = db.findByFirstAndLastName(firstName, lastName).get()
 
     fun findPlayerByName(name: String): Player? = db.findById(name).getOrNull()
 }

@@ -12,7 +12,7 @@ class StandingService(val db:StandingRepository) {
         db.save(standing)
     }
 
-    fun findStandingByTeam(teamName: String): Standing = db.findById(teamName).get()
+    fun findStandingByTeam(teamName: String): Standing = db.findById(teamName).orElse(Standing(teamName))
 
     fun findAllStandings(): List<Standing> = db.findAll().toList()
 

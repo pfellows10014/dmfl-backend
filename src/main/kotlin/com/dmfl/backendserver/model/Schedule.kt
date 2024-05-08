@@ -10,5 +10,6 @@ import jakarta.persistence.Table
 data class Schedule(
     @Id var week: String?,
     val current: Boolean,
+    val isPlayoffs: Boolean,
     @OneToMany
     val games: List<Game>)

@@ -1,16 +1,30 @@
 package com.dmfl.backendserver.controller
 
-import com.dmfl.backendserver.model.*
-import com.dmfl.backendserver.service.*
+import com.dmfl.backendserver.constants.AppConstants.Companion.MAX_POINT_DIFFERENTIAL
+import com.dmfl.backendserver.model.Game
+import com.dmfl.backendserver.model.Player
+import com.dmfl.backendserver.model.Schedule
+import com.dmfl.backendserver.model.Standing
+import com.dmfl.backendserver.model.Team
+import com.dmfl.backendserver.service.GameService
+import com.dmfl.backendserver.service.PlayerService
+import com.dmfl.backendserver.service.ScheduleService
+import com.dmfl.backendserver.service.StandingService
+import com.dmfl.backendserver.service.TeamService
 import mu.KotlinLogging
 import org.apache.commons.lang3.StringUtils
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
-import org.springframework.web.bind.annotation.*
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RestController
 import java.util.Comparator.comparing
-import java.util.NoSuchElementException
+import kotlin.math.abs
 
-@CrossOrigin(origins = ["http://localhost:4200"])
 @RestController
 @RequestMapping("/api")
 class DmflController(private val teamService: TeamService, private val playerService: PlayerService,
@@ -29,9 +43,9 @@ class DmflController(private val teamService: TeamService, private val playerSer
     @PostMapping("/teams/save")
     fun addTeam(@RequestBody team: Team) {
         for(player in team.players){
-            if(player.name != null){
+            if(player.firstName != null && player.lastName != null){
                 try {
-                    playerService.findPlayerByName(player.name!!)
+                    playerService.findPlayerByFirstAndLastName(player.firstName, player.lastName)
                 } catch (e: NoSuchElementException) {
                     log.warn("Player does not exist, creating new player")
                     playerService.save(player)
@@ -44,23 +58,58 @@ class DmflController(private val teamService: TeamService, private val playerSer
         teamService.save(team)
     }
 
-    @PostMapping("/teams/addPlayer")
-    fun addPlayerToTeam(@RequestParam teamName: String, @RequestBody player: Player): ResponseEntity<String> {
+    @PostMapping("/teams/{teamName}/remove")
+    fun removeTeam(@PathVariable teamName: String) {
+        log.debug("Removing team: {}", teamName)
+
+        teamService.delete(teamName)
+    }
+
+    @PostMapping("/teams/{teamName}/players/add")
+    fun addPlayerToTeam(@PathVariable teamName: String, @RequestParam playerFirstName: String, @RequestParam playerLastName: String): ResponseEntity<String> {
 
         try {
             val team = teamService.findTeamByName(teamName)
-            if(team != null) {
-                log.info("Adding player {} to Team {}", player.name, team.name)
+            val player = playerService.findPlayerByFirstAndLastName(playerFirstName, playerLastName)
+            if(team != null && player != null) {
+                log.info("Adding player {}, {} to Team {}", playerFirstName, playerLastName, team.name)
                 val arrayList = ArrayList(team.players)
                 arrayList.add(player)
                 team.players = arrayList;
                 teamService.save(team)
                 return ResponseEntity(HttpStatus.OK)
             }
-            log.warn("Player {} can not be added to non-existent team {}", player.name, teamName)
+            log.warn("Player {}, {} can not be added to non-existent team {}", playerFirstName, playerLastName, teamName)
             return ResponseEntity("Team doesn't exist.", HttpStatus.BAD_REQUEST)
         } catch (e: Exception) {
             log.error("Error occurred while adding player to team: {}", e.stackTrace)
+            throw Exception(e)
+        }
+    }
+
+    @PostMapping("/teams/{teamName}/players/remove")
+    fun removePlayerFromTeam(@PathVariable teamName: String, @RequestParam playerFirstName: String, @RequestParam playerLastName: String): ResponseEntity<String> {
+
+        try {
+            val team = teamService.findTeamByName(teamName)
+            if(team?.players != null) {
+                val playersList = ArrayList(team.players)
+                val playerIterator = playersList.iterator()
+                while (playerIterator.hasNext()) {
+                    val currentPlayer = playerIterator.next()
+                    val requestedPlayer = playerService.findPlayerByFirstAndLastName(playerFirstName, playerLastName)!!
+                    if (currentPlayer.pId == requestedPlayer.pId)
+                        log.info("Player {}, {} has being removed from {}", playerFirstName, playerLastName, team.name)
+                    playerIterator.remove()
+                }
+                team.players = playersList;
+                teamService.save(team)
+                return ResponseEntity(HttpStatus.OK)
+            }
+            log.warn("Team {} does not exist or has no players to be removed", teamName)
+            return ResponseEntity("Team doesn't exist or has no players.", HttpStatus.BAD_REQUEST)
+        } catch (e: Exception) {
+            log.error("Error occurred while removing player from team: {}", e.stackTrace)
             throw Exception(e)
         }
     }
@@ -148,35 +197,62 @@ class DmflController(private val teamService: TeamService, private val playerSer
                 var homeWins = homeTeamStanding.wins
                 var homeLosses = homeTeamStanding.losses
                 var homeStreak = homeTeamStanding.streak
+                var homePointDif = homeTeamStanding.pointDifferential
                 var awayWins = awayTeamStanding.wins
                 var awayLosses = awayTeamStanding.losses
                 var awayStreak = awayTeamStanding.streak
-                if(game.homeScore > game.awayScore) {
+                var awayPointDif = awayTeamStanding.pointDifferential
+                val homeScoreMinusAwayScore = game.homeScore - game.awayScore
+                if(homeScoreMinusAwayScore > 0) {
                     ++homeWins
                     ++awayLosses
-                    ++homeStreak
-                    awayStreak = 0
-                } else {
+                    homeStreak = if(homeStreak == "0" || homeStreak.contains("W", ignoreCase = true)) {
+                        var intStreak = homeStreak.substring(0, homeStreak.length - 1).toInt()
+                        StringBuilder().append((++intStreak).toString()).append("W").toString()
+                    } else {
+                        "1W"
+                    }
+                    awayStreak = if(awayStreak == "0" || awayStreak.contains("L", ignoreCase = true)) {
+                        var intStreak = awayStreak.substring(0, awayStreak.length - 1).toInt()
+                        StringBuilder().append((++intStreak).toString()).append("L").toString()
+                    } else {
+                        "1L"
+                    }
+                    homePointDif += if (homeScoreMinusAwayScore > MAX_POINT_DIFFERENTIAL) MAX_POINT_DIFFERENTIAL else homeScoreMinusAwayScore
+                    awayPointDif -= if (homeScoreMinusAwayScore > MAX_POINT_DIFFERENTIAL) MAX_POINT_DIFFERENTIAL else homeScoreMinusAwayScore
+                }  else {
                     ++homeLosses
                     ++awayWins
-                    homeStreak = 0
-                    ++awayStreak
+                    awayStreak = if(awayStreak == "0" || awayStreak.contains("W", ignoreCase = true)) {
+                        var intStreak = awayStreak.substring(0, awayStreak.length - 1).toInt()
+                        StringBuilder().append((++intStreak).toString()).append("W").toString()
+                    } else {
+                        "1W"
+                    }
+                    homeStreak = if(homeStreak == "0" || homeStreak.contains("L", ignoreCase = true)) {
+                        var intStreak = homeStreak.substring(0, homeStreak.length - 1).toInt()
+                        StringBuilder().append((++intStreak).toString()).append("L").toString()
+                    } else {
+                        "1L"
+                    }
+                    homePointDif -= if (abs(homeScoreMinusAwayScore) > MAX_POINT_DIFFERENTIAL) MAX_POINT_DIFFERENTIAL else abs(homeScoreMinusAwayScore)
+                    awayPointDif += if (abs(homeScoreMinusAwayScore) > MAX_POINT_DIFFERENTIAL) MAX_POINT_DIFFERENTIAL else abs(homeScoreMinusAwayScore)
                 }
 
                 homeTeamStanding.wins = homeWins
                 homeTeamStanding.losses = homeLosses
                 homeTeamStanding.streak = homeStreak
                 homeTeamStanding.winPercentage = (homeWins / (homeWins + homeLosses))
+                homeTeamStanding.pointDifferential = homePointDif
                 homeTeamStanding.pointsFor += game.homeScore
                 homeTeamStanding.pointsAgainst += game.awayScore
-                homeTeamStanding.pointDifferential += (game.homeScore - game.awayScore)
                 awayTeamStanding.wins = awayWins
                 awayTeamStanding.losses = awayLosses
                 awayTeamStanding.streak = awayStreak
                 awayTeamStanding.winPercentage = awayWins / (awayWins + awayLosses)
+                awayTeamStanding.pointDifferential = awayPointDif
                 awayTeamStanding.pointsFor += game.awayScore
                 awayTeamStanding.pointsAgainst += game.homeScore
-                awayTeamStanding.pointDifferential += (game.awayScore - game.homeScore)
                 standingService.updateStandings(homeTeamStanding)
                 standingService.updateStandings(awayTeamStanding)
 
@@ -245,13 +321,16 @@ class DmflController(private val teamService: TeamService, private val playerSer
 //        }
 
         return group.sortedWith(
-            comparing<Standing?, String?>(
-                { it.teamName },
-                { t1, t2 -> (strengthOfVictory(t1, t2))}
-            ).thenComparing(
-                { it.pointDifferential },
-                { pd1, pd2 -> (pd1.compareTo(pd2))},
-            )
+                comparing<Standing?, String?>(
+                        { it.teamName },
+                        { t1, t2 -> (headToHead(t1, t2)) }
+                ).thenComparing(
+                        { it.pointDifferential },
+                        { pd1, pd2 -> (pd1.compareTo(pd2))}
+                ).thenComparing<String?>(
+                        { it.teamName },
+                        { t1, t2 -> (strengthOfVictory(t1, t2))}
+                )
         ).reversed()
     }
 
@@ -275,7 +354,7 @@ class DmflController(private val teamService: TeamService, private val playerSer
 
         teamTwoOpponentList.forEach { game ->
             val teams = StringUtils.splitByWholeSeparator(game.name, " vs ")
-            val opponentRecord: Standing = if(teams[0] == teamName) {
+            val opponentRecord: Standing = if(teams[0] == teamName2) {
                 standingService.findStandingByTeam(teams[1])
             } else {
                 standingService.findStandingByTeam(teams[0])
