@@ -23,13 +23,16 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.util.Comparator.comparing
+import java.util.NoSuchElementException
 import kotlin.math.abs
+import kotlin.text.StringBuilder
 
 @RestController
 @RequestMapping("/api")
 class DmflController(private val teamService: TeamService, private val playerService: PlayerService,
                      private val scheduleService: ScheduleService, private val gameService: GameService,
-                     private val standingService: StandingService) {
+                     private val standingService: StandingService
+) {
 
     private val log = KotlinLogging.logger {}
 
@@ -42,6 +45,7 @@ class DmflController(private val teamService: TeamService, private val playerSer
 
     @PostMapping("/teams/save")
     fun addTeam(@RequestBody team: Team) {
+        log.debug("Adding team: {}", team.name)
         for(player in team.players){
             if(player.firstName != null && player.lastName != null){
                 try {
@@ -55,6 +59,7 @@ class DmflController(private val teamService: TeamService, private val playerSer
                 }
             }
         }
+        log.debug("Calling team service to save team: {}", team.name)
         teamService.save(team)
     }
 
@@ -100,7 +105,7 @@ class DmflController(private val teamService: TeamService, private val playerSer
                     val requestedPlayer = playerService.findPlayerByFirstAndLastName(playerFirstName, playerLastName)!!
                     if (currentPlayer.pId == requestedPlayer.pId)
                         log.info("Player {}, {} has being removed from {}", playerFirstName, playerLastName, team.name)
-                    playerIterator.remove()
+                        playerIterator.remove()
                 }
                 team.players = playersList;
                 teamService.save(team)
@@ -158,6 +163,15 @@ class DmflController(private val teamService: TeamService, private val playerSer
             }
         }
         scheduleService.save(schedule)
+    }
+
+    @PostMapping("/schedule/{week}/reset")
+    fun setSchedule(@PathVariable week: String){
+        log.debug("Resetting the schedule for {}", week)
+
+        scheduleService.resetByWeek(week)
+
+        log.debug("Schedule reset for: {}", week)
     }
 
     @GetMapping("/game/{name}")
@@ -220,7 +234,7 @@ class DmflController(private val teamService: TeamService, private val playerSer
                     }
                     homePointDif += if (homeScoreMinusAwayScore > MAX_POINT_DIFFERENTIAL) MAX_POINT_DIFFERENTIAL else homeScoreMinusAwayScore
                     awayPointDif -= if (homeScoreMinusAwayScore > MAX_POINT_DIFFERENTIAL) MAX_POINT_DIFFERENTIAL else homeScoreMinusAwayScore
-                }  else {
+                } else {
                     ++homeLosses
                     ++awayWins
                     awayStreak = if(awayStreak == "0" || awayStreak.contains("W", ignoreCase = true)) {
@@ -301,6 +315,15 @@ class DmflController(private val teamService: TeamService, private val playerSer
         return standingsOrder
     }
 
+    @PostMapping("/standings/reset")
+    fun resetStandings() {
+        log.debug { "Resetting Standings" }
+
+        standingService.reset()
+
+        log.debug { "Standings reset" }
+    }
+
     fun twoTeamTiebreaker(group: List<Standing>): List<Standing> {
 
         return group.sortedWith(
@@ -320,18 +343,29 @@ class DmflController(private val teamService: TeamService, private val playerSer
 //
 //        }
 
+//        return group.sortedWith(
+//            comparing<Standing?, String?>(
+//                { it.teamName },
+//                { t1, t2 -> (strengthOfVictory(t1, t2))}
+//            ).thenComparing(
+//                { it.pointDifferential },
+//                { pd1, pd2 -> (pd1.compareTo(pd2))},
+//            )
+//        ).reversed()
+
         return group.sortedWith(
                 comparing<Standing?, String?>(
                         { it.teamName },
                         { t1, t2 -> (headToHead(t1, t2)) }
                 ).thenComparing(
                         { it.pointDifferential },
-                        { pd1, pd2 -> (pd1.compareTo(pd2))}
-                ).thenComparing<String?>(
+                        { pd1, pd2 -> (pd1.compareTo(pd2))})
+                .thenComparing<String?>(
                         { it.teamName },
-                        { t1, t2 -> (strengthOfVictory(t1, t2))}
+                        { t1, t2 -> (strengthOfVictory(t1, t2))},
                 )
         ).reversed()
+
     }
 
     fun strengthOfVictory(teamName: String, teamName2: String): Int {
@@ -344,22 +378,34 @@ class DmflController(private val teamService: TeamService, private val playerSer
 
         teamOneOpponentList.forEach { game ->
             val teams = StringUtils.splitByWholeSeparator(game.name, " vs ")
-            val opponentRecord: Standing = if(teams[0] == teamName) {
+            var teamOneWon: Boolean
+            log.debug(game.name)
+            val opponentRecord: Standing = if (teams[0] == teamName) {
+                teamOneWon = game.homeScore > game.awayScore
                 standingService.findStandingByTeam(teams[1])
             } else {
+                teamOneWon = game.awayScore > game.homeScore
                 standingService.findStandingByTeam(teams[0])
             }
-            teamOneOpponentWinPert += opponentRecord.winPercentage
+             if (teamOneWon)
+                teamOneOpponentWinPert += opponentRecord.winPercentage
+            log.debug("{}; Win percentage {}; Opponent Record: {}", teamName, teamOneOpponentWinPert, opponentRecord)
         }
 
         teamTwoOpponentList.forEach { game ->
             val teams = StringUtils.splitByWholeSeparator(game.name, " vs ")
-            val opponentRecord: Standing = if(teams[0] == teamName2) {
+            var teamTwoWon: Boolean
+            log.debug(game.name)
+            val opponentRecord: Standing = if( teams[0] == teamName2) {
+                teamTwoWon = game.homeScore > game.awayScore
                 standingService.findStandingByTeam(teams[1])
             } else {
+                teamTwoWon = game.awayScore > game.homeScore
                 standingService.findStandingByTeam(teams[0])
             }
-            teamTwoOpponentWinPert += opponentRecord.winPercentage
+            if (teamTwoWon)
+                teamTwoOpponentWinPert += opponentRecord.winPercentage
+            log.debug("{}; Win percentage {}; Opponent Record: {}", teamName2, teamTwoOpponentWinPert, opponentRecord)
         }
 
         val teamOneOpponentWinPertAvg = teamOneOpponentWinPert / teamOneOpponentList.size

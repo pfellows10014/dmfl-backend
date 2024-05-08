@@ -22,12 +22,7 @@ class TeamService(val db: TeamRepository, private val playerService: PlayerServi
 
     fun save(team: Team){
         log.debug("Saving and flushing: {}", team.name)
-        try {
-            db.saveAndFlush(team)
-        } catch (e: Exception) {
-            log.error("Error occurred while saving team: {}", e.stackTrace)
-            throw Exception(e)
-        }
+        db.saveAndFlush(team)
     }
 
     fun delete(teamName: String): Unit = db.deleteById(teamName)

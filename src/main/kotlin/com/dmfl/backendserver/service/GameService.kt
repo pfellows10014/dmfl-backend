@@ -9,7 +9,7 @@ import kotlin.jvm.optionals.getOrNull
 class GameService(val db:GameRepository) {
 
     fun save(game: Game) {
-        db.save(game)
+        db.saveAndFlush(game)
     }
 
     fun findGameByName(name: String): Game? = db.findById(name).getOrNull()
