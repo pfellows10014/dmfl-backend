@@ -437,9 +437,9 @@ class DmflController(private val teamService: TeamService, private val playerSer
             }
             if (gameTwo != null) {
                 return if(gameTwo.homeScore > gameTwo.awayScore) {
-                    -1
-                } else {
                     1
+                } else {
+                    -1
                 }
             }
         }
