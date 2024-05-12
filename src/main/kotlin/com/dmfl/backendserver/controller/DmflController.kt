@@ -23,9 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.util.Comparator.comparing
-import java.util.NoSuchElementException
 import kotlin.math.abs
-import kotlin.text.StringBuilder
 
 @RestController
 @RequestMapping("/api")
@@ -360,10 +358,10 @@ class DmflController(private val teamService: TeamService, private val playerSer
                 ).thenComparing(
                         { it.pointDifferential },
                         { pd1, pd2 -> (pd1.compareTo(pd2))})
-                .thenComparing<String?>(
-                        { it.teamName },
-                        { t1, t2 -> (strengthOfVictory(t1, t2))},
-                )
+//                .thenComparing<String?>(
+//                        { it.teamName },
+//                        { t1, t2 -> (strengthOfVictory(t1, t2))},
+//                )
         ).reversed()
 
     }
